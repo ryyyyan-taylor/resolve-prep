@@ -11,9 +11,18 @@ destination and press Start. Originals are never modified or deleted.
 
 ## Usage
 
-    resolve-prep ui  [clips...]          # window with queue and progress
-    resolve-prep run [clips...]          # headless, writes beside each clip
-    resolve-prep run -o /path [clips...] # headless, writes to one directory
+    resolve-prep ui  [clips...]           # window with queue and progress
+    resolve-prep run [clips...]           # headless, writes beside each clip
+    resolve-prep run -o /path [clips...]  # headless, writes to one directory
+    resolve-prep run -p dnxhr_hq [clips]  # LB / SQ / HQ, or ProRes LT / 422
+    resolve-prep run -c 100 [clips...]    # share of CPU to use, default 50
+
+## Processing speed
+
+Transcoding will otherwise take every core it can get. The speed control caps it
+with a cgroup quota, defaulting to half the machine so the box stays usable.
+On a 16-thread CPU, 50% measured ~6.7 cores at 1.5x realtime against ~11.1
+cores at 2.4x unlimited.
 
 ## What it preserves
 

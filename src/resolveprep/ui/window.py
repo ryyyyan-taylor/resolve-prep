@@ -1,15 +1,18 @@
+import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView, QButtonGroup, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
-    QMainWindow, QProgressBar, QPushButton, QRadioButton, QTableWidget,
+    QAbstractItemView, QButtonGroup, QComboBox, QFileDialog, QHBoxLayout, QHeaderView,
+    QLabel, QMainWindow, QProgressBar, QPushButton, QRadioButton, QSlider, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from resolveprep import config, logs, transcode
 from resolveprep.progress import humanise
-from resolveprep.queue import Destination, Mode, Status, free_bytes, inspect, required_bytes, resolve
+from resolveprep.queue import (
+    Destination, Mode, Status, free_bytes, inspect, reprice, required_bytes, resolve,
+)
 from resolveprep.ui.worker import TranscodeWorker
 
 STATUS_TEXT = {
@@ -29,7 +32,7 @@ def _size(count):
 
 
 class Window(QMainWindow):
-    start_requested = Signal(object, str)
+    start_requested = Signal(object, str, int)
 
     def __init__(self, paths):
         super().__init__()
@@ -39,12 +42,14 @@ class Window(QMainWindow):
         self._settings = config.load()
         self._destination = config.destination(self._settings)
         self._profile = self._settings["profile"]
+        self._cpu_percent = self._settings["cpu_percent"]
         self._jobs = []
         self._rows = {}
         self._running = False
         self._paths = [Path(p) for p in paths]
 
         self._build()
+        self._speed_changed(self._cpu_percent)
         self._thread = QThread(self)
         self._worker = TranscodeWorker()
         self._worker.moveToThread(self._thread)
@@ -82,6 +87,34 @@ class Window(QMainWindow):
         destination.addWidget(self._browse)
         destination.addWidget(self._directory, 1)
         layout.addLayout(destination)
+
+        options = QHBoxLayout()
+        options.addWidget(QLabel("Quality"))
+        self._quality = QComboBox()
+        for key in ("dnxhr_lb", "dnxhr_sq", "dnxhr_hq", "prores_lt", "prores_422"):
+            self._quality.addItem(transcode.PROFILES[key].label, key)
+        index = self._quality.findData(self._profile)
+        self._quality.setCurrentIndex(index if index >= 0 else 1)
+        self._quality.currentIndexChanged.connect(self._quality_changed)
+        options.addWidget(self._quality)
+        options.addSpacing(18)
+
+        options.addWidget(QLabel("Processing speed"))
+        self._speed = QSlider(Qt.Horizontal)
+        self._speed.setRange(10, 100)
+        self._speed.setSingleStep(5)
+        self._speed.setPageStep(10)
+        self._speed.setTickInterval(10)
+        self._speed.setTickPosition(QSlider.TicksBelow)
+        self._speed.setFixedWidth(190)
+        self._speed.setValue(self._cpu_percent)
+        self._speed.valueChanged.connect(self._speed_changed)
+        options.addWidget(self._speed)
+        self._speed_label = QLabel("")
+        self._speed_label.setMinimumWidth(130)
+        options.addWidget(self._speed_label)
+        options.addStretch(1)
+        layout.addLayout(options)
 
         self._summary = QLabel("Reading clips…")
         layout.addWidget(self._summary)
@@ -187,6 +220,18 @@ class Window(QMainWindow):
             self._status.setText("")
         self._start.setEnabled(bool(ready) and not short and not self._running)
 
+    def _quality_changed(self):
+        if self._running:
+            return
+        self._profile = self._quality.currentData()
+        reprice(self._jobs, self._profile)
+        self._refresh_summary()
+
+    def _speed_changed(self, value):
+        self._cpu_percent = value
+        cores = transcode.cores_for(value)
+        self._speed_label.setText(f"{value}% · ~{cores} of {os.cpu_count()} cores")
+
     def _destination_changed(self):
         if self._running:
             return
@@ -213,8 +258,9 @@ class Window(QMainWindow):
         self._alongside.setEnabled(False)
         self._into.setEnabled(False)
         self._browse.setEnabled(False)
+        self._quality.setEnabled(False)
         self._persist()
-        self.start_requested.emit(self._jobs, self._profile)
+        self.start_requested.emit(self._jobs, self._profile, self._cpu_percent)
 
     def _on_cancel(self):
         self._cancel.setEnabled(False)
@@ -254,6 +300,7 @@ class Window(QMainWindow):
         self._cancel.setEnabled(False)
         self._alongside.setEnabled(True)
         self._into.setEnabled(True)
+        self._quality.setEnabled(True)
         written = sum(1 for job in self._jobs if job.status is Status.DONE)
         failed = sum(1 for job in self._jobs if job.status is Status.FAILED)
         skipped = sum(1 for job in self._jobs if job.status is Status.SKIPPED)
@@ -264,6 +311,7 @@ class Window(QMainWindow):
         self._settings["mode"] = self._destination.mode.value
         self._settings["directory"] = str(self._destination.directory or "")
         self._settings["profile"] = self._profile
+        self._settings["cpu_percent"] = self._cpu_percent
         try:
             config.save(self._settings)
         except OSError as error:
@@ -279,7 +327,10 @@ class Window(QMainWindow):
 def launch(paths=None):
     from PySide6.QtWidgets import QApplication
 
+    from resolveprep.ui import theme
+
     app = QApplication.instance() or QApplication([])
+    theme.apply(app)
     app.setApplicationName("Resolve Prep")
     # lets Wayland match the window to the .desktop entry for its icon
     app.setDesktopFileName("resolve-prep")

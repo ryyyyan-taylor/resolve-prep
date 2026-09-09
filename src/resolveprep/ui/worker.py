@@ -18,10 +18,10 @@ class TranscodeWorker(QObject):
         self.cancel = threading.Event()
         self._log = logs.get()
 
-    @Slot(object, str)
-    def run(self, jobs, profile):
+    @Slot(object, str, int)
+    def run(self, jobs, profile, cpu_percent):
         self.cancel.clear()
-        runner = Runner(jobs, profile, cancel=self.cancel)
+        runner = Runner(jobs, profile, cancel=self.cancel, cpu_percent=cpu_percent)
 
         def progressed(job, fraction, speed):
             self.progressed.emit(job, fraction, speed)

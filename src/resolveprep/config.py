@@ -7,7 +7,12 @@ import tomli_w
 from resolveprep import transcode
 from resolveprep.queue import Destination, Mode
 
-DEFAULTS = {"mode": Mode.ALONGSIDE.value, "directory": "", "profile": transcode.DEFAULT_PROFILE}
+DEFAULTS = {
+    "mode": Mode.ALONGSIDE.value,
+    "directory": "",
+    "profile": transcode.DEFAULT_PROFILE,
+    "cpu_percent": transcode.DEFAULT_CPU_PERCENT,
+}
 
 
 def config_path():
@@ -26,7 +31,15 @@ def load(path=None):
         pass
     if values.get("profile") not in transcode.PROFILES:
         values["profile"] = transcode.DEFAULT_PROFILE
+    values["cpu_percent"] = _percent(values.get("cpu_percent"))
     return values
+
+
+def _percent(value):
+    try:
+        return max(10, min(100, int(value)))
+    except (TypeError, ValueError):
+        return transcode.DEFAULT_CPU_PERCENT
 
 
 def save(values, path=None):

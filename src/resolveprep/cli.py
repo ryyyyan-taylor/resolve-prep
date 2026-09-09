@@ -14,6 +14,8 @@ def main(argv=None):
     run.add_argument("clips", type=Path, nargs="+")
     run.add_argument("-o", "--output-dir", type=Path, default=None, help="write here instead of beside each clip")
     run.add_argument("-p", "--profile", choices=sorted(transcode.PROFILES), default=None)
+    run.add_argument("-c", "--cpu", type=int, default=None, metavar="PERCENT",
+                     help="share of the CPU to use, 10-100 (default 50)")
     run.set_defaults(handler=_run)
 
     gui = subcommands.add_parser("ui", help="open the transcode window")
@@ -28,6 +30,8 @@ def main(argv=None):
 def _run(args):
     settings = config.load()
     profile = args.profile or settings["profile"]
+    cpu_percent = args.cpu if args.cpu is not None else settings["cpu_percent"]
+    cpu_percent = max(10, min(100, cpu_percent))
     destination = (
         Destination(mode=Mode.DIRECTORY, directory=args.output_dir)
         if args.output_dir
@@ -42,9 +46,10 @@ def _run(args):
         return 1
 
     total = sum(1 for job in jobs if job.status is Status.READY)
-    print(f"{total} to transcode, ~{needed / 1e9:.1f} GB, {transcode.PROFILES[profile].label}")
+    print(f"{total} to transcode, ~{needed / 1e9:.1f} GB, {transcode.PROFILES[profile].label}, "
+          f"{cpu_percent}% CPU (~{transcode.cores_for(cpu_percent)} cores)")
 
-    runner = Runner(jobs, profile)
+    runner = Runner(jobs, profile, cpu_percent=cpu_percent)
 
     def finished(job):
         eta = runner.progress.eta()

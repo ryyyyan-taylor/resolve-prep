@@ -116,11 +116,19 @@ def free_bytes(jobs, destination):
     return shutil.disk_usage(target).free
 
 
+def reprice(jobs, profile):
+    for job in jobs:
+        if job.clip is not None:
+            job.size = transcode.estimated_bytes(job.clip, profile)
+    return jobs
+
+
 class Runner:
-    def __init__(self, jobs, profile=transcode.DEFAULT_PROFILE, cancel=None, clock=time.monotonic):
+    def __init__(self, jobs, profile=transcode.DEFAULT_PROFILE, cancel=None, clock=time.monotonic, cpu_percent=100):
         self.jobs = jobs
         self.profile = profile
         self.cancel = cancel
+        self.cpu_percent = cpu_percent
         self.progress = QueueProgress([job.duration for job in jobs], clock)
         self._log = logs.get()
 
@@ -145,7 +153,10 @@ class Runner:
                     on_progress(job, fraction, speed)
 
             try:
-                transcode.run(job.clip, job.output, self.profile, on_progress=report, cancel=self.cancel)
+                transcode.run(
+                    job.clip, job.output, self.profile,
+                    on_progress=report, cancel=self.cancel, cpu_percent=self.cpu_percent,
+                )
             except transcode.Cancelled:
                 self.progress.fail(index)
                 job.status, job.note = Status.SKIPPED, "cancelled"

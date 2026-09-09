@@ -33,3 +33,22 @@ def test_unknown_profile_is_replaced(tmp_path):
 def test_directory_mode_without_a_directory_degrades_to_alongside():
     destination = config.destination({"mode": "directory", "directory": ""})
     assert destination.mode is Mode.ALONGSIDE
+
+
+def test_cpu_percent_defaults_to_half():
+    from resolveprep import transcode
+    assert config.DEFAULTS["cpu_percent"] == transcode.DEFAULT_CPU_PERCENT == 50
+
+
+def test_cpu_percent_is_clamped(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text("cpu_percent = 500")
+    assert config.load(path)["cpu_percent"] == 100
+    path.write_text("cpu_percent = 0")
+    assert config.load(path)["cpu_percent"] == 10
+
+
+def test_nonsense_cpu_percent_falls_back(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text('cpu_percent = "lots"')
+    assert config.load(path)["cpu_percent"] == 50

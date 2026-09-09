@@ -1,9 +1,13 @@
+import os
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from resolveprep import logs
+
+DEFAULT_CPU_PERCENT = 50
 
 
 class TranscodeError(RuntimeError):
@@ -38,6 +42,20 @@ def estimated_bytes(clip, profile=DEFAULT_PROFILE):
     spec = PROFILES[profile]
     pixels_per_second = clip.width * clip.height * clip.fps
     return int(pixels_per_second * spec.bits_per_pixel / 8 * clip.duration)
+
+
+def cores_for(percent):
+    total = os.cpu_count() or 1
+    return max(1, round(total * percent / 100))
+
+
+# ffmpeg's own -threads is a poor throttle: 8 threads still occupied ~10.6 of 16
+# cores here and ran no slower than 16. A cgroup quota caps it for real.
+def wrap_for_cpu(command, percent):
+    if percent >= 100 or not shutil.which("systemd-run"):
+        return list(command)
+    quota = max(10, int(percent) * (os.cpu_count() or 1))
+    return ["systemd-run", "--user", "--scope", "--quiet", "-p", f"CPUQuota={quota}%", *command]
 
 
 def build_command(clip, output, profile=DEFAULT_PROFILE):
@@ -80,10 +98,10 @@ def parse_speed(line):
     return None
 
 
-def run(clip, output, profile=DEFAULT_PROFILE, on_progress=None, cancel=None):
+def run(clip, output, profile=DEFAULT_PROFILE, on_progress=None, cancel=None, cpu_percent=100):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    command = build_command(clip, output, profile)
+    command = wrap_for_cpu(build_command(clip, output, profile), cpu_percent)
     logs.get().debug("%s", " ".join(command))
 
     # stderr to a file so a full pipe buffer can never deadlock the reader
