@@ -1,0 +1,36 @@
+# Maintainer: Ryan Taylor <ryan4125taylor@gmail.com>
+pkgname=resolve-prep
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Transcode camera clips to DNxHR so DaVinci Resolve on Linux can import them"
+arch=('any')
+url="https://github.com/ryyyyan-taylor/resolve-prep"
+license=('GPL-3.0-only')
+depends=(
+  'python'
+  'python-tomli-w'
+  'ffmpeg'
+  'pyside6'
+)
+makedepends=('python-build' 'python-installer' 'python-hatchling' 'python-wheel')
+checkdepends=('python-pytest')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# refresh with `updpkgsums` once tag v0.1.0 is pushed
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  # src layout: the package is not installed yet, and the Qt tests need no display
+  PYTHONPATH="$PWD/src" QT_QPA_PLATFORM=offscreen pytest
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  # the wheel carries the .desktop entry and icon as shared-data
+  python -m installer --destdir="$pkgdir" dist/*.whl
+}

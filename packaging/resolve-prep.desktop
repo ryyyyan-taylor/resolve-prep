@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Resolve Prep
+GenericName=DNxHR Transcoder
+Comment=Transcode camera clips to DNxHR for DaVinci Resolve
+Exec=resolve-prep ui %F
+Icon=resolve-prep
+Terminal=false
+Categories=AudioVideo;Video;AudioVideoEditing;
+Keywords=DNxHR;transcode;Resolve;ffmpeg;H264;proxy;
+MimeType=video/mp4;video/quicktime;video/x-m4v;
