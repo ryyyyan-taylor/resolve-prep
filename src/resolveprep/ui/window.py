@@ -136,11 +136,10 @@ class Window(QMainWindow):
             self._table.setCellWidget(row, 2, bar)
 
     def _reresolve(self):
-        if not self._jobs:
-            return
-        resolve(self._jobs, self._destination)
-        for job in self._jobs:
-            self._refresh(job)
+        if self._jobs:
+            resolve(self._jobs, self._destination)
+            for job in self._jobs:
+                self._refresh(job)
         self._refresh_summary()
 
     def _refresh(self, job):
@@ -150,12 +149,21 @@ class Window(QMainWindow):
         text = STATUS_TEXT.get(job.status, job.status.value)
         if job.note:
             text = f"{text} — {job.note}"
-        self._table.item(row, 1).setText(text)
+        cell = self._cell(job)
+        if cell is not None:
+            cell.setText(text)
         bar = self._table.cellWidget(row, 2)
         if bar is not None:
             bar.setValue(int(job.fraction * 1000))
 
     def _refresh_summary(self):
+        # reachable from an application launcher, where no files are passed
+        if not self._jobs:
+            self._summary.setText("No clips selected")
+            self._status.setText("Select clips in your file manager and choose Open With")
+            self._start.setEnabled(False)
+            self._browse.setEnabled(self._into.isChecked())
+            return
         ready = [job for job in self._jobs if job.status is Status.READY]
         needed = required_bytes(self._jobs)
         free = free_bytes(self._jobs, self._destination)
@@ -214,10 +222,10 @@ class Window(QMainWindow):
         self._worker.stop()
 
     def _on_started(self, job):
-        row = self._rows.get(id(job))
-        if row is not None:
-            self._table.item(row, 1).setText("transcoding")
-            self._table.scrollToItem(self._table.item(row, 0))
+        cell = self._cell(job)
+        if cell is not None:
+            cell.setText("transcoding")
+            self._table.scrollToItem(cell)
 
     def _on_progressed(self, job, fraction, speed):
         row = self._rows.get(id(job))
@@ -226,8 +234,13 @@ class Window(QMainWindow):
         bar = self._table.cellWidget(row, 2)
         if bar is not None:
             bar.setValue(int(fraction * 1000))
-        if speed:
-            self._table.item(row, 1).setText(f"transcoding — {speed:.1f}x")
+        cell = self._cell(job)
+        if cell is not None and speed:
+            cell.setText(f"transcoding — {speed:.1f}x")
+
+    def _cell(self, job):
+        row = self._rows.get(id(job))
+        return None if row is None else self._table.item(row, 1)
 
     def _on_completed(self, job):
         self._refresh(job)
