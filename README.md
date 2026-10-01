@@ -33,6 +33,8 @@ cores at 2.4x unlimited.
 
 ## Install
 
-    uv tool install --editable .
+Needs `ffmpeg` on your PATH.
+
+    uv tool install --editable ".[ui]"
     ln -sf "$PWD/packaging/resolve-prep.desktop" ~/.local/share/applications/
     update-desktop-database ~/.local/share/applications
